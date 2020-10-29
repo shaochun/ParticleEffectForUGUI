@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Profiling;
-using UnityEngine.Rendering;
 using UnityEngine.UI;
 using ShaderPropertyType = Coffee.UIExtensions.UIParticle.AnimatableProperty.ShaderPropertyType;
 
@@ -18,9 +17,8 @@ namespace Coffee.UIExtensions
         //################################
         // Constant or Readonly Static Members.
         //################################
-        static readonly int s_IdMainTex = Shader.PropertyToID("_MainTex");
+        static readonly int s_IdMainTex = Shader.PropertyToID("_BaseMap");
         static readonly List<Vector3> s_Vertices = new List<Vector3>();
-        static readonly List<Color32> s_Colors = new List<Color32>();
         static readonly List<UIParticle> s_TempRelatables = new List<UIParticle>();
         static readonly List<UIParticle> s_ActiveParticles = new List<UIParticle>();
 
@@ -89,9 +87,7 @@ namespace Coffee.UIExtensions
                     var textureSheet = cachedParticleSystem.textureSheetAnimation;
                     if (textureSheet.enabled && textureSheet.mode == ParticleSystemAnimationMode.Sprites && 0 < textureSheet.spriteCount)
                     {
-                        var sprite = textureSheet.GetSprite(0);
-                        textureSheet.uvChannelMask = (UVChannelFlags) (sprite && sprite.packed ? -1 : 0);
-                        tex = sprite ? sprite.texture : null;
+						tex = textureSheet.GetSprite (0).texture;
                     }
                     Profiler.EndSample();
                 }
@@ -101,7 +97,7 @@ namespace Coffee.UIExtensions
                     var mat = material;
                     if (mat && mat.HasProperty(s_IdMainTex))
                     {
-                        tex = mat.mainTexture;
+                        tex = mat.GetTexture(s_IdMainTex);
                     }
                     Profiler.EndSample();
                 }
@@ -336,7 +332,6 @@ namespace Coffee.UIExtensions
         List<UIParticle> _children = new List<UIParticle>();
         Matrix4x4 scaleaMatrix = default(Matrix4x4);
         Vector3 _oldPos;
-        static readonly Vector3 minimumVec3 = new Vector3(0.0000001f, 0.0000001f, 0.0000001f);
         static ParticleSystem.Particle[] s_Particles = new ParticleSystem.Particle[4096];
 
         /// <summary>
@@ -385,12 +380,8 @@ namespace Coffee.UIExtensions
                     Profiler.EndSample();
 
                     // #69: Editor crashes when mesh is set to null when ParticleSystem.RenderMode=Mesh
-                    if (_renderer.renderMode == ParticleSystemRenderMode.Mesh && !_renderer.mesh)
-                        return;
 
                     // #61: When ParticleSystem.RenderMode=None, an error occurs
-                    if (_renderer.renderMode == ParticleSystemRenderMode.None)
-                        return;
 
                     Profiler.BeginSample("Make Matrix");
                     ParticleSystem.MainModule main = m_ParticleSystem.main;
@@ -404,7 +395,7 @@ namespace Coffee.UIExtensions
                             matrix =
                                 scaleaMatrix
                                 * Matrix4x4.Rotate(rectTransform.rotation).inverse
-                                * Matrix4x4.Scale(rectTransform.lossyScale + minimumVec3).inverse;
+								* Matrix4x4.Scale (rectTransform.lossyScale).inverse;
                             break;
                         case ParticleSystemSimulationSpace.World:
                             matrix =
@@ -461,7 +452,6 @@ namespace Coffee.UIExtensions
 
                         if (!cam)
                         {
-                            Profiler.EndSample();
                             return;
                         }
                         if (m_IsTrail)
@@ -477,16 +467,6 @@ namespace Coffee.UIExtensions
                         // Apply matrix.
                         Profiler.BeginSample("Apply matrix to position");
 
-                        if (QualitySettings.activeColorSpace == ColorSpace.Linear)
-                        {
-                            _mesh.GetColors(s_Colors);
-                            var count_c = s_Colors.Count;
-                            for (int i = 0; i < count_c; i++)
-                            {
-                                s_Colors[i] = ((Color)s_Colors[i]).gamma;
-                            }
-                            _mesh.SetColors(s_Colors);
-                        }
 
                         _mesh.GetVertices(s_Vertices);
                         var count = s_Vertices.Count;
@@ -495,9 +475,7 @@ namespace Coffee.UIExtensions
                             s_Vertices[i] = matrix.MultiplyPoint3x4(s_Vertices[i]);
                         }
                         _mesh.SetVertices(s_Vertices);
-                        _mesh.RecalculateBounds();
                         s_Vertices.Clear();
-                        s_Colors.Clear();
                         Profiler.EndSample();
                     }
 
